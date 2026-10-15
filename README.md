@@ -14,7 +14,9 @@ This repo currently contains the first implementation slices for that architectu
 - Cargo workspace with crate boundaries matching the design plan
 - shared message, identifier, symbol, and order-book model
 - deterministic in-memory and CSV feed sources
+- streaming Ferris CSV sources for L2 and book-ticker data
 - merged replay sequencer with stable ordering
+- sequencer-to-`BookMap` integration with snapshot packet handling
 - position and risk-management primitives
 - `StrategyHost` with the initial `FarPegStrategy` placeholder
 - `trade_sim` binary that exercises the current scaffold
@@ -106,6 +108,13 @@ For an optimized run:
 cargo run --release -p sim-app --bin trade_sim
 ```
 
+To process the converted SOL and ADA Ferris data:
+
+```bash
+FERRIS_CSV_ROOT=/mnt/bigdata2/Ferris_csv/OKX/2026/1011 \
+  cargo run -p sim-app --bin trade_sim
+```
+
 ## Current status
 
 This is an early vertical slice, not yet the full simulator or live runtime.
@@ -116,14 +125,15 @@ Implemented today:
 - shared message and identifier model
 - symbol registry and per-symbol order books
 - deterministic replay sources and sequencer
+- Ferris CSV L2 and book-ticker ingestion
+- end-to-end feed, sequencer, and `BookMap` processing
 - position and risk-management primitives
 - simulated order acknowledgement scaffold
 - `StrategyHost` and initial `FarPegStrategy` type
 
 Still to implement for version 1:
 
-- historical market-data adapters and deserialization
-- dispatcher and packet-boundary integration
+- dispatcher and strategy message routing
 - `Trader`, `OrderSink`, and execution-gateway interfaces
 - complete strategy behavior, beginning with far-peg orders
 - exchange fill, cancel, latency, and delayed-update semantics
@@ -133,9 +143,8 @@ Still to implement for version 1:
 
 The next implementation phase is:
 
-1. add historical market-data adapters for the supported feed formats
-2. define source-specific parsing and deserialization errors
-3. preserve packet-boundary and snapshot metadata
-4. add end-to-end ordering tests across market data and algorithm orders
-5. add the `Trader`, `OrderSink`, and execution-gateway interfaces
-6. implement simulated acknowledgements, fills, cancels, latency, and delayed updates
+1. add dispatcher and strategy message routing
+2. add the polymorphic `Trader` interface
+3. add `OrderManager` to `OrderSink` integration
+4. add simulated and live execution-sink interfaces
+5. implement simulated acknowledgements, fills, cancels, latency, and delayed updates

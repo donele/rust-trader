@@ -5,8 +5,8 @@
 Build a Rust simulation stack that is useful early, structurally sound, and incrementally
 extensible toward broader functional coverage.
 
-The target is a Rust simulation system that preserves the key semantics of the working C++
-`trade_sim`:
+The target is a Rust simulation system that preserves the key semantics of the established
+`trade_sim` runtime:
 
 - event ordering semantics
 - market-data replay semantics
@@ -14,11 +14,11 @@ The target is a Rust simulation system that preserves the key semantics of the w
 - order / position / risk state transitions
 - strategy dispatch flow
 
-while adopting Rust-native structure instead of mechanically copying the C++ or Java shapes.
+while adopting Rust-native structure instead of mechanically copying legacy class shapes.
 
 ## Reference architecture
 
-The C++ runtime is the functional reference point:
+The established runtime flow is:
 
 `SimSequencer -> ExchangeSimulator -> StrategyHost -> TradingEngine`
 
@@ -52,7 +52,7 @@ Version 1 does not need:
 
 - live shared-memory playback
 - production order placer integration
-- full alpha graph parity with C++
+- full alpha graph coverage
 - highly optimized IPC infrastructure
 
 ## Recommended repository shape
@@ -112,7 +112,7 @@ Completed:
 - top-level `Message` enum with explicit message timestamps
 - initial tests for message timestamps and reference protocol message IDs
 - workspace validation with `cargo check --workspace` and `cargo test --workspace`
-- fixed-point-style `Price`/`Quantity` values for book ordering, matching the C++ book representation
+- fixed-point-style `Price`/`Quantity` values for deterministic book ordering
 - `Symbol` and `SymbolRegistry` with ID and flat-symbol lookup
 - per-symbol `OrderBook` and `BookMap` primitives
 - absolute L2 incremental updates, top-of-book updates, snapshot resets, and explicit reset handling
@@ -124,30 +124,34 @@ Completed:
 - half-open replay time-window filtering
 - CSV algorithm-order source with symbol lookup, validation, sorting, and `AlgoOrderRequest` emission
 - tests for multi-channel merge ordering, tie-breaking, time windows, and CSV input
+- streaming Ferris CSV sources for L2 and book-ticker data
+- snapshot packet-boundary emission and source-specific parsing errors
+- end-to-end feed, sequencer, and `BookMap` processing tests
+- full-day SOL and ADA validation from converted Ferris CSV data
 
 Still intentionally incomplete in this phase:
 
-- exact C++ packed/wire layouts and shared-memory serialization
+- exact packed/wire layouts and shared-memory serialization
 - external feed parsing and message deserialization
 - symbol registry and symbol metadata
 - price/quantity fixed-point representation
 - complete message families such as control, balance, position, and risk updates
-- historical market-data file adapters and deserialization
+- dispatcher and strategy message routing
+- polymorphic trader and order-sink interfaces
 
 The current types are therefore a semantic Rust model, not yet a binary-compatible transport model.
 
 ## Next steps
 
-Phases 1 and 2 are complete at the primitive level, and the first Phase 3 sequencing slice is in
-place. The remaining Phase 3 work is:
+Phases 1 and 2 are complete at the primitive level, and the historical CSV feed slice is now in
+place. The next work is:
 
-1. Add historical market-data adapters for the reference feed formats.
-2. Define source-specific parsing and deserialization errors.
-3. Add packet-boundary and snapshot metadata to feed messages where required.
-4. Add end-to-end tests proving stable ordering across historical market data and algorithm orders.
-
-After the feed adapters are stable, begin Phase 4: exchange simulation, including simulated acknowledgements,
-crossing/fill behavior, cancels, latency parameters, and delayed `OrderUpdate` emission.
+1. Add dispatcher and strategy message routing.
+2. Make the strategy boundary polymorphic, starting with `FarPegStrategy`.
+3. Add `Trader`, `OrderManager`, and `OrderSink` integration.
+4. Add simulated and live execution-sink interfaces.
+5. Implement simulated acknowledgements, crossing/fill behavior, cancels, latency, and delayed
+   `OrderUpdate` emission.
 
 ## High-level implementation order
 
@@ -381,7 +385,7 @@ Prefer:
 
 ### Separate data model from runtime wiring
 
-The C++ codebase mixes several concerns in one runtime:
+The legacy runtime mixes several concerns in one process:
 
 - domain state
 - dispatch logic
@@ -555,7 +559,7 @@ For a fixed input dataset or scenario:
 - compare final positions
 - compare final PnL / exposure summaries
 
-Absolute byte-for-byte identity with C++ is unlikely at first, but consistent event ordering and
+Absolute byte-for-byte identity is not the initial goal; consistent event ordering and
 state-transition behavior is the right target.
 
 ### Scenario tests
@@ -591,7 +595,7 @@ Mitigation:
 
 - build scenario by scenario
 - build targeted tests from known datasets and event traces
-- document each intentional deviation from C++
+- document each intentional deviation from the established semantics
 
 ### 2. Order manager complexity
 
@@ -709,7 +713,7 @@ Prefer plain deserialized config structs over dynamic map-style configuration in
 ## Recommendation
 
 The project is feasible and worthwhile if the goal is a usable Rust simulation engine that follows
-the proven C++ semantics while improving code clarity and safety.
+the established domain semantics while improving code clarity and safety.
 
 The right first step is:
 

@@ -4,6 +4,10 @@ use std::collections::BinaryHeap;
 use crate::{MessageSource, VecMessageSource};
 use core::{Message, TimeNanos};
 
+/// Runtime state associated with one message source in the sequencer.
+///
+/// The channel owns the source and buffers its next message while that message
+/// waits in the global schedule.
 struct Channel {
     name: String,
     priority: i64,
@@ -12,6 +16,10 @@ struct Channel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Lightweight ordering metadata for one buffered channel message.
+///
+/// The heap stores these entries instead of the full source state. The channel
+/// index points back to the corresponding [`Channel`] in `SimSequencer`.
 struct HeapEntry {
     timestamp: TimeNanos,
     priority: i64,
@@ -125,10 +133,12 @@ impl SimSequencer {
                     channel_index: entry.channel_index,
                 });
             }
+            if self.end_time.is_some_and(|end| message.ts_nanos() >= end) {
+                return None;
+            }
             if self
                 .start_time
                 .is_some_and(|start| message.ts_nanos() < start)
-                || self.end_time.is_some_and(|end| message.ts_nanos() >= end)
             {
                 continue;
             }
@@ -194,5 +204,15 @@ mod tests {
         let messages = sequencer.drain();
         let timestamps: Vec<_> = messages.iter().map(Message::ts_nanos).collect();
         assert_eq!(timestamps, vec![10, 19]);
+    }
+
+    #[test]
+    fn sequencer_stops_at_end_time() {
+        let mut sequencer = SimSequencer::new(vec![trade(10), trade(20), trade(30)]);
+        sequencer.set_time_window(None, Some(20));
+
+        assert_eq!(sequencer.next_message().unwrap().ts_nanos(), 10);
+        assert!(sequencer.next_message().is_none());
+        assert_eq!(sequencer.len(), 1);
     }
 }
