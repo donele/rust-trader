@@ -1,119 +1,86 @@
 use std::path::{Path, PathBuf};
 
-use core::book::BookMap;
 use core::symbols::{Symbol, SymbolRegistry};
-use core::{
-    ClientId, Message, OrderAction, OrderId, OrderRequest, OrderType, ParentOrderId, Side,
-    StrategyId, SymbolId, TimeInForce,
+use core::{Message, StrategyId, SymbolId};
+use feed::{
+    EventPayload, EventTarget, MarketDataCsvKind, MarketDataCsvSource, SimSequencer,
+    SimulationEventQueue,
 };
-use feed::{MarketDataCsvKind, MarketDataCsvSource, SimSequencer};
 use sim_exchange::ExchangeSimulator;
-use strategy::StrategyHost;
+use strategy::Dispatcher;
+
+const DEFAULT_DATA_ROOT: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../examples/Ferris_csv/XYZX/2026/1011"
+);
 
 fn main() {
-    if let Some(root) = std::env::var_os("FERRIS_CSV_ROOT") {
-        if let Err(error) = run_ferris_day(Path::new(&root)) {
-            eprintln!("ferris run failed: {error}");
-            std::process::exit(1);
-        }
-        return;
+    if let Err(error) = run_ferris_data(Path::new(DEFAULT_DATA_ROOT)) {
+        eprintln!("trade_sim failed: {error}");
+        std::process::exit(1);
     }
-
-    let events = vec![Message::OrderRequest(OrderRequest {
-        ts_nanos: 0,
-        symbol: SymbolId(1),
-        parent_order_id: ParentOrderId(0),
-        client_id: ClientId(1),
-        order_id: OrderId(0),
-        action: OrderAction::New,
-        side: Side::Buy,
-        price: 100.0,
-        qty: 1.0,
-        time_in_force: TimeInForce::Gtc,
-        order_type: OrderType::Limit,
-        strategy_id: StrategyId(2),
-        exchange_time: 0,
-        window: 0,
-        post_only: false,
-    })];
-
-    let sequencer = SimSequencer::new(events);
-    let mut simulator = ExchangeSimulator::new();
-    let mut strategy = StrategyHost::new(StrategyId(2));
-
-    for event in sequencer.drain() {
-        if let Message::OrderRequest(request) = event {
-            let update = simulator.submit(request);
-            strategy.on_order_update(update);
-        } else {
-            let _ = strategy.on_event(&event);
-        }
-    }
-
-    println!("trade_sim scaffold ready");
-    println!("order_updates_seen={}", strategy.order_updates_seen());
-    println!("next_step=set FERRIS_CSV_ROOT to run historical market data");
 }
 
-fn run_ferris_day(root: &Path) -> Result<(), String> {
-    let mut registry = SymbolRegistry::default();
-    registry
-        .register(Symbol::new(
-            SymbolId(1),
-            "SOL__USDT__PERP__OKX",
-            "OKX",
-            0.01,
-            0.01,
-        ))
-        .map_err(|error| format!("register SOL: {error:?}"))?;
-    registry
-        .register(Symbol::new(
-            SymbolId(2),
-            "ADA__USDT__PERP__OKX",
-            "OKX",
-            0.0001,
-            0.1,
-        ))
-        .map_err(|error| format!("register ADA: {error:?}"))?;
-
+fn run_ferris_data(root: &Path) -> Result<(), String> {
+    let registry = symbol_registry()?;
     let mut sequencer = SimSequencer::default();
-    add_ferris_sources(
-        &mut sequencer,
-        root,
-        "SOL__USDT__PERP__OKX",
-        SymbolId(1),
-        0.01,
-        0.01,
-    )?;
-    add_ferris_sources(
-        &mut sequencer,
-        root,
-        "ADA__USDT__PERP__OKX",
-        SymbolId(2),
-        0.0001,
-        0.1,
-    )?;
+    add_ferris_sources(&mut sequencer, root, "ABC__XYZX", SymbolId(1), 0.01, 0.01)?;
+    add_ferris_sources(&mut sequencer, root, "DEF__XYZX", SymbolId(2), 0.0001, 0.1)?;
 
-    let mut books = BookMap::from_registry(&registry);
-    let mut message_count = 0usize;
-    while let Some(message) = sequencer.next_message() {
-        books
-            .process(&message)
-            .map_err(|error| format!("process message: {error:?}"))?;
-        message_count += 1;
+    let mut queue = SimulationEventQueue::new(sequencer);
+    let mut simulator = ExchangeSimulator::new();
+    let mut dispatcher = Dispatcher::new(&registry, StrategyId(2));
+    let mut events_processed = 0usize;
+    let mut source_messages = 0usize;
+
+    while let Some(event) = queue.next_event() {
+        events_processed += 1;
+        match (event.target, event.payload) {
+            (EventTarget::Exchange, EventPayload::Message(message)) => {
+                source_messages += 1;
+                let client_message = simulator.on_market_data(message);
+                queue.push_client_message(client_message.ts_nanos(), 0, client_message);
+            }
+            (EventTarget::Exchange, EventPayload::OrderRequest(request)) => {
+                let update = simulator.submit(request);
+                queue.push_client_message(update.ts_nanos, 0, Message::OrderUpdate(update));
+            }
+            (EventTarget::Client, EventPayload::Message(message)) => {
+                dispatcher
+                    .process(&message)
+                    .map_err(|error| format!("dispatch message: {error:?}"))?
+            }
+            (EventTarget::Client, EventPayload::OrderRequest(_)) => {
+                unreachable!("OrderRequest is internal to the exchange")
+            }
+        }
     }
 
-    println!("ferris csv run complete");
-    println!("messages_processed={message_count}");
+    println!("trade_sim complete");
+    println!("data_root={}", root.display());
+    println!("source_messages={source_messages}");
+    println!("events_processed={events_processed}");
+    println!("order_updates_seen={}", dispatcher.order_updates_seen());
     for symbol_id in [SymbolId(1), SymbolId(2)] {
-        let book = books
-            .get(symbol_id)
+        let book = dispatcher
+            .book(symbol_id)
             .ok_or_else(|| format!("missing book for {symbol_id:?}"))?;
         let bid = book.best_bid().map(|level| level.price.to_value());
         let ask = book.best_ask().map(|level| level.price.to_value());
         println!("{symbol_id:?}: best_bid={bid:?} best_ask={ask:?}");
     }
     Ok(())
+}
+
+fn symbol_registry() -> Result<SymbolRegistry, String> {
+    let mut registry = SymbolRegistry::default();
+    registry
+        .register(Symbol::new(SymbolId(1), "ABC__XYZX", "XYZX", 0.01, 0.01))
+        .map_err(|error| format!("register ABC: {error:?}"))?;
+    registry
+        .register(Symbol::new(SymbolId(2), "DEF__XYZX", "XYZX", 0.0001, 0.1))
+        .map_err(|error| format!("register DEF: {error:?}"))?;
+    Ok(registry)
 }
 
 fn add_ferris_sources(

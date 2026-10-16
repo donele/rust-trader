@@ -7,7 +7,7 @@ The planned runtime flow is:
 `Sequencer -> (Simulator) -> Dispatcher -> StrategyHost -> Strategy -> Trader -> OrderManager -> OrderSink`
 
 `OrderSink` is polymorphic. Simulation uses a simulated sink, while live execution uses an
-exchange-specific gateway such as Binance or OKX.
+exchange-specific gateway such as Binance or XYZX.
 
 This repo currently contains the first implementation slices for that architecture:
 
@@ -18,8 +18,8 @@ This repo currently contains the first implementation slices for that architectu
 - merged replay sequencer with stable ordering
 - sequencer-to-`BookMap` integration with snapshot packet handling
 - position and risk-management primitives
-- `StrategyHost` with the initial `FarPegStrategy` placeholder
-- `trade_sim` binary that exercises the current scaffold
+- typed dispatcher and strategy-host routing
+- `trade_sim` binary that runs the bundled ten-minute Ferris example data
 
 For the design plan, see [DESIGN_PLAN.md](./DESIGN_PLAN.md).
 
@@ -91,28 +91,26 @@ cargo build --release
 
 ## Run
 
-Run the scaffold binary from the repository root:
+Run the simulator from the repository root:
 
 ```bash
 cargo run -p sim-app --bin trade_sim
 ```
 
-Expected output is a short scaffold status message including:
+The default run reads the ten-minute sample data from:
 
-- `trade_sim scaffold ready`
-- `order_updates_seen=1`
+`examples/Ferris_csv/XYZX/2026/1011/`
+
+Expected output includes:
+
+- `trade_sim complete`
+- `source_messages=161334`
+- `events_processed=322668`
 
 For an optimized run:
 
 ```bash
 cargo run --release -p sim-app --bin trade_sim
-```
-
-To process the converted SOL and ADA Ferris data:
-
-```bash
-FERRIS_CSV_ROOT=/mnt/bigdata2/Ferris_csv/OKX/2026/1011 \
-  cargo run -p sim-app --bin trade_sim
 ```
 
 ## Current status
@@ -127,13 +125,15 @@ Implemented today:
 - deterministic replay sources and sequencer
 - Ferris CSV L2 and book-ticker ingestion
 - end-to-end feed, sequencer, and `BookMap` processing
+- exchange-first, zero-latency message flow into the client dispatcher
+- dispatcher-owned client-visible `BookMap`
 - position and risk-management primitives
 - simulated order acknowledgement scaffold
-- `StrategyHost` and initial `FarPegStrategy` type
+- typed dispatcher and strategy message routing
+- polymorphic `Strategy` boundary with initial `FarPegStrategy` implementation
 
 Still to implement for version 1:
 
-- dispatcher and strategy message routing
 - `Trader`, `OrderSink`, and execution-gateway interfaces
 - complete strategy behavior, beginning with far-peg orders
 - exchange fill, cancel, latency, and delayed-update semantics
@@ -143,8 +143,7 @@ Still to implement for version 1:
 
 The next implementation phase is:
 
-1. add dispatcher and strategy message routing
-2. add the polymorphic `Trader` interface
-3. add `OrderManager` to `OrderSink` integration
-4. add simulated and live execution-sink interfaces
-5. implement simulated acknowledgements, fills, cancels, latency, and delayed updates
+1. add the polymorphic `Trader` interface
+2. add `OrderManager` to `OrderSink` integration
+3. add simulated and live execution-sink interfaces
+4. implement simulated acknowledgements, fills, cancels, latency, and delayed updates

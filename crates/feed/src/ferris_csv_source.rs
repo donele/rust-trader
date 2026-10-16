@@ -470,8 +470,8 @@ mod tests {
         let directory =
             std::env::temp_dir().join(format!("rust_trade_sim_ferris_day_{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
-        let l2_path = directory.join("SOL.book_l2.csv");
-        let ticker_path = directory.join("SOL.book_ticker.csv");
+        let l2_path = directory.join("ABC.book_l2.csv");
+        let ticker_path = directory.join("ABC.book_ticker.csv");
 
         let mut l2 = std::fs::File::create(&l2_path).unwrap();
         writeln!(
@@ -493,11 +493,11 @@ mod tests {
 
         let mut registry = SymbolRegistry::default();
         registry
-            .register(Symbol::new(SymbolId(1), "SOL", "OKX", 0.1, 0.1))
+            .register(Symbol::new(SymbolId(1), "ABC", "XYZX", 0.1, 0.1))
             .unwrap();
         let mut sequencer = SimSequencer::default();
         sequencer.add_source(
-            "SOL_L2",
+            "ABC_L2",
             2,
             Box::new(
                 MarketDataCsvSource::from_path(
@@ -511,7 +511,7 @@ mod tests {
             ),
         );
         sequencer.add_source(
-            "SOL_TICKER",
+            "ABC_TICKER",
             1,
             Box::new(
                 MarketDataCsvSource::from_path(

@@ -146,6 +146,23 @@ impl SimSequencer {
         }
     }
 
+    pub fn peek_next_message(&mut self) -> Option<Message> {
+        self.initialize();
+        let entry = self.schedule.peek()?;
+        self.channels[entry.channel_index].next_message
+    }
+
+    /// Drives the ordered event stream through a runtime handler.
+    pub fn run<E, F>(&mut self, mut handler: F) -> Result<(), E>
+    where
+        F: FnMut(Message) -> Result<(), E>,
+    {
+        while let Some(message) = self.next_message() {
+            handler(message)?;
+        }
+        Ok(())
+    }
+
     pub fn len(&self) -> usize {
         self.schedule.len()
     }

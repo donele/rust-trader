@@ -1,4 +1,4 @@
-use core::{OrderId, OrderRequest, OrderUpdate};
+use core::{Message, OrderId, OrderRequest, OrderUpdate};
 
 #[derive(Debug, Default)]
 pub struct ExchangeSimulator {
@@ -8,6 +8,12 @@ pub struct ExchangeSimulator {
 impl ExchangeSimulator {
     pub fn new() -> Self {
         Self { next_order_id: 1 }
+    }
+
+    /// For now, market-data latency is zero: the exchange forwards the event
+    /// to the client path immediately after receiving it.
+    pub fn on_market_data(&mut self, message: Message) -> Message {
+        message
     }
 
     pub fn submit(&mut self, request: OrderRequest) -> OrderUpdate {
