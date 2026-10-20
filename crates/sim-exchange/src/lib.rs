@@ -1,5 +1,9 @@
 use core::{Message, OrderId, OrderRequest, OrderUpdate};
 
+pub trait ExchangeMessageSink {
+    fn enqueue(&mut self, message: Message, strategy_time: core::TimeNanos, priority: i64);
+}
+
 #[derive(Debug, Default)]
 pub struct ExchangeSimulator {
     next_order_id: u64,
@@ -10,17 +14,19 @@ impl ExchangeSimulator {
         Self { next_order_id: 1 }
     }
 
-    /// For now, market-data latency is zero: the exchange forwards the event
-    /// to the client path immediately after receiving it.
-    pub fn on_market_data(&mut self, message: Message) -> Message {
-        message
+    pub fn process_message(&mut self, message: &Message) {
+        if matches!(message, Message::OrderUpdate(_)) {
+            return;
+        }
+
+        // Market-data processing and fill simulation will be added here.
     }
 
-    pub fn submit(&mut self, request: OrderRequest) -> OrderUpdate {
+    pub fn submit<S: ExchangeMessageSink>(&mut self, request: OrderRequest, sink: &mut S) {
         let order_id = OrderId(self.next_order_id);
         self.next_order_id += 1;
 
-        OrderUpdate {
+        let update = OrderUpdate {
             ts_nanos: request.ts_nanos,
             symbol: request.symbol,
             parent_order_id: request.parent_order_id,
@@ -43,6 +49,7 @@ impl ExchangeSimulator {
             strategy_id: request.strategy_id,
             order_status: core::OrderStatus::New,
             reject_reason: core::RejectReason::None,
-        }
+        };
+        sink.enqueue(Message::OrderUpdate(update), update.ts_nanos, 0);
     }
 }

@@ -1,4 +1,4 @@
-# rust-trade-sim
+# rust-trader
 
 Rust trading and simulation runtime with shared live/simulation components.
 
@@ -105,7 +105,7 @@ Expected output includes:
 
 - `trade_sim complete`
 - `source_messages=161334`
-- `events_processed=322668`
+- `events_processed=161334`
 
 For an optimized run:
 

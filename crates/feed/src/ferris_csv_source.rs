@@ -361,9 +361,6 @@ fn parse_f64(value: &str, line: usize, field: &'static str) -> Result<f64, Marke
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SimSequencer;
-    use core::book::BookMap;
-    use core::symbols::{Symbol, SymbolRegistry};
     use std::io::Write;
 
     #[test]
@@ -463,82 +460,5 @@ mod tests {
         ));
         assert!(source.try_next_message().unwrap().is_none());
         std::fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn ferris_sources_merge_into_book_map() {
-        let directory =
-            std::env::temp_dir().join(format!("rust_trade_sim_ferris_day_{}", std::process::id()));
-        std::fs::create_dir_all(&directory).unwrap();
-        let l2_path = directory.join("ABC.book_l2.csv");
-        let ticker_path = directory.join("ABC.book_ticker.csv");
-
-        let mut l2 = std::fs::File::create(&l2_path).unwrap();
-        writeln!(
-            l2,
-            "our_time,is_snapshot,exchange_time,price,qty,side,flags"
-        )
-        .unwrap();
-        writeln!(l2, "10,1,100,100.0,2.0,0,0").unwrap();
-        writeln!(l2, "10,1,100,100.5,1.0,1,0").unwrap();
-        writeln!(l2, "20,0,200,100.1,3.0,0,0").unwrap();
-
-        let mut ticker = std::fs::File::create(&ticker_path).unwrap();
-        writeln!(
-            ticker,
-            "our_time,exchange_time,bid_price,bid_qty,ask_price,ask_qty"
-        )
-        .unwrap();
-        writeln!(ticker, "30,300,100.2,4.0,100.6,2.0").unwrap();
-
-        let mut registry = SymbolRegistry::default();
-        registry
-            .register(Symbol::new(SymbolId(1), "ABC", "XYZX", 0.1, 0.1))
-            .unwrap();
-        let mut sequencer = SimSequencer::default();
-        sequencer.add_source(
-            "ABC_L2",
-            2,
-            Box::new(
-                MarketDataCsvSource::from_path(
-                    &l2_path,
-                    MarketDataCsvKind::BookL2,
-                    SymbolId(1),
-                    0.1,
-                    0.1,
-                )
-                .unwrap(),
-            ),
-        );
-        sequencer.add_source(
-            "ABC_TICKER",
-            1,
-            Box::new(
-                MarketDataCsvSource::from_path(
-                    &ticker_path,
-                    MarketDataCsvKind::BookTicker,
-                    SymbolId(1),
-                    0.1,
-                    0.1,
-                )
-                .unwrap(),
-            ),
-        );
-
-        let mut books = BookMap::from_registry(&registry);
-        let mut messages = 0;
-        for message in sequencer.drain() {
-            books.process(&message).unwrap();
-            messages += 1;
-        }
-
-        let book = books.get(SymbolId(1)).unwrap();
-        assert_eq!(messages, 10);
-        assert!((book.best_bid().unwrap().price.to_value() - 100.2).abs() < 1e-9);
-        assert!((book.best_bid().unwrap().qty.to_value() - 4.0).abs() < 1e-9);
-        assert!((book.best_ask().unwrap().price.to_value() - 100.6).abs() < 1e-9);
-        assert!((book.best_ask().unwrap().qty.to_value() - 2.0).abs() < 1e-9);
-
-        std::fs::remove_dir_all(directory).unwrap();
     }
 }

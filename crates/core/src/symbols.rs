@@ -50,6 +50,20 @@ pub struct SymbolRegistry {
 }
 
 impl SymbolRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_symbols(
+        symbols: impl IntoIterator<Item = Symbol>,
+    ) -> Result<Self, SymbolRegistryError> {
+        let mut registry = Self::new();
+        for symbol in symbols {
+            registry.register(symbol)?;
+        }
+        Ok(registry)
+    }
+
     pub fn register(&mut self, symbol: Symbol) -> Result<(), SymbolRegistryError> {
         if symbol.price_increment <= 0.0 || !symbol.price_increment.is_finite() {
             return Err(SymbolRegistryError::InvalidPriceIncrement);
